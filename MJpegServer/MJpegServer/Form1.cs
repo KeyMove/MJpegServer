@@ -241,7 +241,6 @@ namespace MJpegServer
         {
             if (checkBox1.Checked) //设置开机自启动  
             {
-                MessageBox.Show("设置开机自启动，需要修改注册表", "提示");
                 string path = Application.ExecutablePath;
                 RegistryKey rk = Registry.LocalMachine;
                 RegistryKey rk2 = rk.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
@@ -251,7 +250,6 @@ namespace MJpegServer
             }
             else //取消开机自启动  
             {
-                MessageBox.Show("取消开机自启动，需要修改注册表", "提示");
                 string path = Application.ExecutablePath;
                 RegistryKey rk = Registry.LocalMachine;
                 RegistryKey rk2 = rk.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
