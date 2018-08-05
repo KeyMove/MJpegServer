@@ -54,6 +54,11 @@ namespace MJpegServer
                 byte[] headarray = ServerCoding.GetBytes(sb.ToString());
                 Buffer.BlockCopy(headarray, 0, indexPageArray, 0, sb.Length);
                 Buffer.BlockCopy(pagearray, 0, indexPageArray, sb.Length, pagearray.Length);
+                Directory.CreateDirectory(DirPath);
+                var fs = new FileStream(DirPath + "\\index.html", FileMode.OpenOrCreate);
+                fs.Write(pagearray,0,pagearray.Length);
+                fs.Flush();
+                fs.Close();
             }
             isRun = false;
         }
@@ -93,6 +98,11 @@ namespace MJpegServer
             postMap.Remove(flag);
         }
 
+        public void SendHttpData(string str,Socket sk)
+        {
+            sk.Send(ServerCoding.GetBytes(string.Format("HTTP/1.1 200 OK\r\nContent-type: text/html\r\nContent-Length: {0}\r\n\r\n{1}", str.Length, str)));
+        }
+
         void PostCall(string message,Socket sk)
         {
             foreach(string v in postMap.Keys)
@@ -116,12 +126,12 @@ namespace MJpegServer
                 getCall(path, sk);
                 return null;
             }
-            if (!File.Exists(DirPath + path))
+            if (!File.Exists(DirPath +"\\"+path))
             {
                 sk.Send(Error404Array);
                 return null;
             }
-            FileStream fs = new FileStream(DirPath + path, FileMode.Open);
+            FileStream fs = new FileStream(DirPath + "\\" + path, FileMode.Open);
             return fs;
         }
 

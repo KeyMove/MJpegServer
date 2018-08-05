@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using KMButton;
 using Microsoft.Win32;
+using System.Net.NetworkInformation;
+using System.Net;
+using HIDTEST;
 
 namespace MJpegServer
 {
@@ -18,9 +21,19 @@ namespace MJpegServer
     {
 
         MJPEGStream MjpegServer=new MJPEGStream();
-        HTTP WebServer = new HTTP(80);
+        HTTP WebServer;
         Bitmap map;
+        Image lastImage;
         Graphics g;
+        Object lua;
+
+        Bitmap drawmap;
+        Graphics draw;
+
+        List<Timer> TimerList = new List<Timer>();
+        List<Object> FunList = new List<Object>();
+
+        USBHID HID = new USBHID();
 
         Timer UpdateImage = new Timer();
 
@@ -29,9 +42,548 @@ namespace MJpegServer
 
         int updatevalue=0;
 
-        public Form1()
+        protected override void WndProc(ref Message m)
         {
+            if(HID.CheckMessage(m)>0)
+                if (HIDCheck.Enabled)
+                {
+                    Input.TestHID();
+                }
+            base.WndProc(ref m);
+        }
+
+        internal static int GetPort()
+        {
+            bool inUse = false;
+
+            int port = 80;
+
+            IPGlobalProperties ipProperties = IPGlobalProperties.GetIPGlobalProperties();
+            IPEndPoint[] ipEndPoints = ipProperties.GetActiveTcpListeners();
+
+            Random randport = new Random();
+
+            while (true) {
+                inUse = false;
+                foreach (IPEndPoint endPoint in ipEndPoints)
+                {
+                    if (endPoint.Port == port)
+                    {
+                        inUse = true;
+                        break;
+                    }
+                }
+                if (!inUse)
+                    return port;
+                port = randport.Next(1000, 65535);
+            }
+        }
+
+        public void KeyUP(int vk)
+        {
+            Input.KeyInput(vk, Input.KeyFlag.Up);
+        }
+
+        public void KeyDOWN(int vk)
+        {
+            Input.KeyInput(vk, Input.KeyFlag.Down);
+        }
+
+        public void MouseLeftDOWN()
+        {
+            Input.MouseInput(0, 0, Input.MouseFlag.LeftDown);
+        }
+
+        public void MouseLeftUP()
+        {
+            Input.MouseInput(0, 0, Input.MouseFlag.LeftUp);
+        }
+
+        public void MouseRightDOWN()
+        {
+            Input.MouseInput(0, 0, Input.MouseFlag.RightDown);
+        }
+
+        public void MouseRightUP()
+        {
+            Input.MouseInput(0, 0, Input.MouseFlag.RightUp);
+        }
+
+        public void MouseAddMove(int x,int y)
+        {
+            Input.MouseInput(x, y);
+        }
+
+        public void MouseMoveTo(int x,int y)
+        {
+            Input.setDest(new Point(x, y), Cursor.Position);
+        }
+
+        //public Object getDM()
+        //{
+        //    return Input.getDM();
+        //}
+
+        void InitLua()
+        {
+            try
+            {
+                NLua.Lua VM = new NLua.Lua();
+                VM.LoadCLRPackage();
+                VM.RegisterFunction("print", this, this.GetType().GetMethod("msg"));
+                VM["Handle"] = this;
+                lua = VM;
+                LoadLua.Visible = true;
+            }
+            catch { };
+        }
+
+        public int msg(object arg)
+        {
+            if(arg==null)
+                OutputBox.AppendText("nil");
+            else
+                OutputBox.AppendText(arg.ToString());
+            return -1;
+        }
+
+        void InitLua(string filepath)
+        {
+            try
+            {
+                if(lua!=null)
+                    (lua as NLua.Lua).DoFile(filepath);
+            }
+            catch { }
+        }
+
+        public Bitmap UpdateScreen()
+        {
+            //if (lastImage != null) lastImage.Dispose();
+            lastImage = ScreenCap.GetImage();
+            return lastImage as Bitmap;
+        }
+        int[] colorData;
+        public void UpdateScreenColor() 
+        {
+            Size s = ScreenCap.Size;
+            if (colorData == null)
+                colorData = new int[s.Width*s.Height];
+            ScreenCap.GetImageForByte(0, 0, s.Width, s.Height, colorData);
+        }
+
+
+        public List<int> FindRectRGB(int r,int g,int b,int x,int y,int w,int h,int offset=0)
+        {
+            List<int> plist = new List<int>();
+            if (colorData == null) return plist;
+            int color = (r << 16) + (g << 8) + b;
+            color += 0xff << 24;
+            var s = ScreenCap.Size;
+            int count = s.Width * s.Height;
+            int index = 0;
+            int sr = r, sg = g, sb = b;
+            if (offset != 0)
+                for (int i = 0; i < count; i++)
+                {
+                    color = colorData[index++];
+                    r = sr - 0xff & (color >> 16);
+                    g = sg - 0xff & (color >> 8);
+                    b = sb - 0xff & color;
+                    if (r < 0) r = -r;
+                    if (g < 0) g = -g;
+                    if (b < 0) b = -b;
+                    if (r > offset) continue;
+                    if (g > offset) continue;
+                    if (b > offset) continue;
+                    plist.Add(((i % s.Width) << 16) + (i / s.Width));
+                }
+            else
+                for (int i = 0; i < count; i++)
+                {
+                    if (colorData[index++] == color)
+                    {
+                        plist.Add(((i % s.Width) << 16) + (i / s.Width));
+                    }
+                }
+            return plist;
+        }
+
+        public List<int> FindRGB(int r, int g, int b, int offset = 0)
+        {
+            List<int> plist = new List<int>();
+            if (colorData == null) return plist;
+            int color = (r << 16) + (g << 8) + b;
+            color += 0xff << 24;
+            var s = ScreenCap.Size;
+            int count = s.Width * s.Height;
+            int index = 0;
+            int sr=r, sg=g, sb=b;
+            if (offset!=0)
+                for (int i = 0; i < count; i++)
+                {
+                    color = colorData[index++];
+                    r = sr - (0xff & (color >> 16));
+                    g = sg - (0xff & (color >> 8));
+                    b = sb - (0xff & color);
+                    if (r < 0) r = -r;
+                    if (g < 0) g = -g;
+                    if (b < 0) b = -b;
+                    if (r > offset) continue;
+                    if (g > offset) continue;
+                    if (b > offset) continue;
+                    plist.Add(((i % s.Width) << 16) + (i / s.Width));
+                }
+            else
+                for (int i = 0; i < count; i++)
+                {
+                    if (colorData[index++] == color)
+                    {
+                        plist.Add(((i % s.Width) << 16) + (i / s.Width));
+                    }
+                }
+            return plist;
+        }
+
+        public void DrawMark(int x,int y)
+        {
+            draw.DrawEllipse(Pens.Red, x - 5, y - 5, 10, 10);
+        }
+
+        public void DrawMark(int b)
+        {
+            int x=b>>16, y=b&0xffff;
+            draw.DrawEllipse(Pens.Red, x - 5, y - 5, 10, 10);
+            DrawTest.Image = drawmap;
+        }
+
+        public void DrawScreen()
+        {
+            var s = ScreenCap.Size;
+            drawmap = (Bitmap)ScreenCap.GetImageFor(0, 0, s.Width, s.Height);
+            DrawTest.Size = s;
+            DrawTest.Image = drawmap;
+            draw = Graphics.FromImage(drawmap);
+        }
+
+        public int[] LuaTable(NLua.LuaTable tab)
+        {
+            int[] val = new int[tab.Values.Count];
+            int index = 0;
+            foreach(double i in tab.Values)
+            {
+                val[index++] = (int)i;
+            }
+            return val;
+        }
+
+        public int[] matchOffsetList(int[] px,int r,int g,int b,int offset,List<int> plist,bool mult = false) 
+        {
+            List<int> matchpos = new List<int>();
+            for (int i = 0; i < plist.Count; i++)
+            {
+                int bz = plist[i];
+                int lx = bz >> 16;
+                int ly = bz & 0xffff;
+                int j = 0;
+                int i1 = 0;
+                bool e = true;
+                for (j = 0; j < px.Length / 2; j++)
+                {
+                    int v = ((lx + px[i1]) << 16) + ((ly + px[i1 + 1]) & 0xffff);
+                    if (!matchRGBInt(v, r, g, b, offset))
+                    {
+                        e = false;
+                        break;
+                    }
+                    i1 += 2;
+                }
+                if (e)
+                {
+                    if (!mult)
+                        return new int[] { bz };
+                    else
+                        matchpos.Add(bz);
+                }
+            }
+            if (matchpos.Count == 0) return null;
+            return matchpos.ToArray();
+        }
+
+        public int[] matchPointList(int[] px, int[] py, int r,int g,int b,bool mult=false)
+        {
+            return matchPointList(px, py, FindRGB(r, g, b),mult);
+        }
+
+        public int[] matchPointList(int[] px,int[] py, List<int> plist,bool mult=false)
+        {
+            List<int> matchpos = new List<int>();
+            for(int i = 0; i < plist.Count; i++)
+            {
+                int b = plist[i];
+                int lx = b >> 16;
+                int ly = b & 0xffff;
+                int j = 0;
+                int i1=0;
+                bool e=true;
+                for (j = 0; j < px.Length/2; j++)
+                {
+                    int v = ((lx + px[i1]) << 16) + ((ly + px[i1 + 1]) & 0xffff);
+                    if (!plist.Contains(v))
+                    {
+                        e = false;
+                        break;
+                    }
+                    i1 += 2;
+                }
+                i1 = 0;
+                for (j = 0; j < py.Length/2; j++)
+                {
+                    int v = ((lx + py[i1]) << 16) + ((ly + py[i1 + 1]) & 0xffff);
+                    if (plist.Contains(v))
+                    {
+                        e = false;
+                        break;
+                    }
+                    i1 += 2;
+                }
+                if (e)
+                {
+                    if (!mult)
+                        return new int[] { b };
+                    else
+                        matchpos.Add(b);
+                }
+            }
+            if (matchpos.Count == 0) return null;
+            return matchpos.ToArray();
+        }
+
+        public int[] matchPointListInt(int[] px, int[] py, List<int> plist, bool mult = false)
+        {
+            List<int> matchpos = new List<int>();
+            for (int i = 0; i < plist.Count; i++)
+            {
+                int b = plist[i];
+                int lx = b >> 16;
+                int ly = b & 0xffff;
+                int j = 0;
+                int i1 = 0;
+                bool e = true;
+                for (j = 0; j < px.Length / 2; j++)
+                {
+                    int v = b+px[i1];
+                    if (!plist.Contains(v))
+                    {
+                        e = false;
+                        break;
+                    }
+                    i1 ++;
+                }
+                i1 = 0;
+                for (j = 0; j < py.Length / 2; j++)
+                {
+                    int v = b + py[i1];
+                    if (plist.Contains(v))
+                    {
+                        e = false;
+                        break;
+                    }
+                    i1 ++;
+                }
+                if (e)
+                {
+                    if (!mult)
+                        return new int[] { b };
+                    else
+                        matchpos.Add(b);
+                }
+            }
+            if (matchpos.Count == 0) return null;
+            return matchpos.ToArray();
+        }
+
+        public bool matchRGBInt(int loc, int r, int g, int b, int offset = 0)
+        {
+            var s = ScreenCap.Size;
+            int p = (loc >> 16) + (loc & 0xffff) * s.Width;
+            if (p > s.Width * s.Height) return false;
+
+            if (offset == 0)
+            {
+                if ((0xffffff & colorData[p]) != ((r << 16) | (g << 8) | b)) return false;
+            }
+            else
+            {
+                r -= 0xff&(colorData[p]>>16);
+                g -= 0xff & (colorData[p]>>8);
+                b -= 0xff & colorData[p];
+                if (r < 0) r = -r;
+                if (g < 0) g = -g;
+                if (b < 0) b = -b;
+                if (r > offset) return false;
+                if (g > offset) return false;
+                if (b > offset) return false;
+            }
+            return true;
+        }
+
+        public int offset(int loc,int x,int y)
+        {
+            return (((loc >> 16) + x) << 16) + ((loc & 0xffff) + y);
+        }
+
+        public int matchNextRGB(int loc,int max,int r,int g,int b,int offset = 0)
+        {
+            var s = ScreenCap.Size;
+            int p = (loc >> 16) + (loc & 0xffff) * s.Width;
+            int index = 0;
+            int lr = r, lg = g, lb = b;
+            int inc = 1;
+            if (max < 0)
+            {
+                max = -max;inc = -1;
+                if (p < max) max = p;
+            }
+            else
+            {
+                max = (p + max) > (s.Width * s.Height) ? s.Width * s.Height - p : max;
+            }
+            while (max-- > 0)
+            {
+                if (offset == 0)
+                {
+                    if ((0xffffff & colorData[p]) != ((r << 16) | (g << 8) | b)) return index;
+                }
+                else
+                {
+                    r = lr;
+                    g = lg;
+                    b = lb;
+                    int targetcolor = colorData[p];
+                    r -= 0xff & (targetcolor >> 16);
+                    g -= 0xff & (targetcolor >> 8);
+                    b -= 0xff & targetcolor;
+                    if (r < 0) r = -r;
+                    if (g < 0) g = -g;
+                    if (b < 0) b = -b;
+                    if (r > offset) return index;
+                    if (g > offset) return index;
+                    if (b > offset) return index;
+                }
+                index++;
+                p+=inc;
+            }
+            return -1;
+        }
+
+        public bool matchRGBOffset(int loc,int x,int y,int r,int g,int b,int offset = 0)
+        {
+            return matchRGB(loc >> 16 + x, loc & 0xffff + y, r, g, b, offset);
+        }
+
+        public bool matchRGB(int x,int y,int r,int g,int b,int offset=0)
+        {
+            var s = ScreenCap.Size;
+            int p = (s.Width * y + x);
+            if (offset == 0)
+            {
+                if ((0xffffff&colorData[p]) != ((r << 16) | (g << 8) | b)) return false;
+            }
+            else
+            {
+                int targetcolor = colorData[p];
+                r -= 0xff & (targetcolor >> 16);
+                g -= 0xff & (targetcolor >> 8);
+                b -= 0xff & targetcolor;
+                if (r < 0) r = -r;
+                if (g < 0) g = -g;
+                if (b < 0) b = -b;
+                if (r > offset) return false;
+                if (g > offset) return false;
+                if (b > offset) return false;
+            }
+            return true;
+        }
+
+        public Bitmap GetScreen(int x,int y,int ex,int ey)
+        {
+            lastImage = ScreenCap.GetImageFor(x, y, ex, ey);
+            return lastImage as Bitmap;
+        }
+
+        public void SetImg(Image img)
+        {
+            TestPic.Image = img;
+        }
+
+        public void StartTimer(int id,int time,NLua.LuaFunction lf)
+        {
+            for (int i = 0; i < TimerList.Count; i++)
+            {
+                if ((int)TimerList[i].Tag == id)
+                {
+                    TimerList[i].Interval=time;
+                    FunList[i] = lf;
+                    return;
+                }
+            }
+            Timer t = new Timer();
+            t.Interval = time;
+            t.Tag = id;
+            FunList.Add(lf);
+            TimerList.Add(t);
+            t.Start();
+            t.Tick += T_Tick;
+        }
+
+        private void T_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                (FunList[TimerList.IndexOf((Timer)sender)] as NLua.LuaFunction).Call();
+            }
+            catch(Exception ex) {
+                OutputBox.AppendText(ex.ToString());
+            }
+        }
+
+        public void StopTimer(int id)
+        {
+            for(int i = 0; i < TimerList.Count; i++)
+            {
+                if ((int)TimerList[i].Tag == id)
+                {
+                    TimerList[i].Stop();
+                    TimerList[i].Dispose();
+                    FunList.RemoveAt(i);
+                    TimerList.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+
+
+        public Form1(params string[] slist)
+        {
+            //UpdateScreen().GetPixel()
+            //var x = HID.getHandle(2211, 4433);
+            //if (x.Count > 0)
+            //{
+            //    HID.OpenUSBHID(x[0]);
+            //}
+
+
+            Input.HID = HID;
+
             InitializeComponent();
+
+            drawmap = new Bitmap(DrawTest.Width, DrawTest.Height);
+            draw = Graphics.FromImage(drawmap);
+
+            int port = 80;
+            WebServer = new HTTP(port=GetPort());
+            PortLable.Text = " Port:" + port;
             map = new Bitmap(WindowW, WindowH);
             g = Graphics.FromImage(map);
             g.Clear(Color.Black);
@@ -39,6 +591,17 @@ namespace MJpegServer
             ScreenCap.Init(WindowW, WindowH, true);
             if (Input.Init())
                 ButtonMode.Text = "DM模式";
+            Input.HIDStatsChange = (bool stats) => {
+                if (HIDCheck.Enabled)
+                {
+                    Invoke(new MethodInvoker(() => {
+                        if (stats)
+                            ButtonMode.Text = "HID模式";
+                        else
+                            ButtonMode.Text = "HID断开";
+                    }));
+                }
+            };
             WebServer.ServerStart();
             WebServer.RegisterPost("cmd:", (string v,Socket s) => {
                 s.Disconnect(true);
@@ -143,10 +706,21 @@ namespace MJpegServer
                 }
             });
             WebServer.RegisterGet((string v, Socket s) => {
-                if(v.Contains("Stream"))
+                if(v.Contains("?Stream"))
                 {
                     MjpegServer.SendImage(s, map);
                     MjpegServer.AddSocket(s);
+                }
+                if (v.IndexOf("?img")==0)
+                {
+                    if(MjpegServer.Clients > 0)
+                        MjpegServer.SendJpeg(s, lastImage);
+                    else
+                        MjpegServer.SendJpeg(s, ScreenCap.GetImage());
+                }
+                if (v.Contains("Config"))
+                {
+                    WebServer.SendHttpData("Q:"+MjpegServer.Quality+"S:"+((int)(MjpegServer.Scale*100))+"F:"+updatevalue, s);
                 }
             });
 
@@ -156,7 +730,7 @@ namespace MJpegServer
                 if (MjpegServer.Clients > 0)
                 {
                     try { 
-                    MjpegServer.WriteImage(ScreenCap.GetImage());
+                    MjpegServer.WriteImage(lastImage=ScreenCap.GetImage());
                     }
                     catch { }
                 }
@@ -173,9 +747,20 @@ namespace MJpegServer
             {
                 System.Environment.Exit(0);
             };
+            try
+            {
+                updateturnonstart();
+            }
+            catch
+            {
+                checkBox1.Enabled = false;
+                checkBox1.Text = "(没有权限)" + checkBox1.Text;
+            }
+
+            InitLua();
         }
 
-        byte GetVkCode(string s)
+        public byte GetVkCode(string s)
         {
             string str = s.ToUpper();
             switch (str)
@@ -186,6 +771,7 @@ namespace MJpegServer
                 case "SHIFT": return 0x10;
                 case "CTRL": return 0x11;
                 case "ALT": return 0x12;
+                case "ESCAPE":return 0x1b;
                 case "END": return 0x23;
                 case "HOME": return 0x24;
                 case "ARROWLEFT": return 0x25;
@@ -194,6 +780,18 @@ namespace MJpegServer
                 case "ARROWDOWN": return 0x28;
                 case "INSERT": return 0x2d;
                 case "DELETE": return 0x2E;
+                case "F1":return 0x70;
+                case "F2": return 0x71;
+                case "F3": return 0x72;
+                case "F4": return 0x73;
+                case "F5": return 0x74;
+                case "F6": return 0x75;
+                case "F7": return 0x76;
+                case "F8": return 0x77;
+                case "F9": return 0x78;
+                case "F10": return 0x79;
+                case "F11": return 0x7a;
+                case "F12": return 0x7b;
                 default: return (byte)str.ToCharArray()[0];
             }
         }
@@ -237,8 +835,16 @@ namespace MJpegServer
             WebServer.loadIndexFile();
         }
 
+
+
+        bool setcheck = false;
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
+            if (setcheck)
+            {
+                setcheck = false;
+                return;
+            }
             if (checkBox1.Checked) //设置开机自启动  
             {
                 string path = Application.ExecutablePath;
@@ -257,6 +863,282 @@ namespace MJpegServer
                 rk2.Close();
                 rk.Close();
             }
+        }
+
+        void updateturnonstart()
+        {
+            RegistryKey rk = Registry.LocalMachine;
+            RegistryKey rk2 = rk.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+            if (rk2.GetValue("MjpegServer") != null)
+            {
+                setcheck = true;
+                checkBox1.Checked = true;
+            }
+        }
+
+        private void HIDCheck_CheckedChanged(object sender, EventArgs e)
+        {
+            Input.HIDMODE = HIDCheck.Enabled;
+        }
+
+        private void 退出ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            notifyIcon1.Visible = false;
+            System.Environment.Exit(0);
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            notifyIcon1.Visible = false;
+            base.OnClosing(e);
+        }
+
+        private void notifyIcon1_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            this.Show();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            this.SizeChanged += Form1_SizeChanged;
+        }
+
+        private void Form1_SizeChanged(object sender, EventArgs e)
+        {
+            if (this.WindowState == FormWindowState.Minimized)
+            {
+                this.Hide();
+                this.notifyIcon1.Visible = true;
+            }
+        }
+
+        OpenFileDialog of = new OpenFileDialog();
+        private void LoadLua_Click(object sender, EventArgs e)
+        {
+            of.Filter = "Lua脚本文件|*.lua";
+            if (of.ShowDialog() == DialogResult.OK)
+            {
+                InitLua(of.FileName);
+            }
+        }
+
+        private void InputButton_Click(object sender, EventArgs e)
+        {
+            if (lua == null) return;
+            try
+            {
+                (lua as NLua.Lua).DoString(InputBOX.Text);
+            }catch(Exception ex)
+            {
+                OutputBox.AppendText(ex.ToString());
+            }
+        }
+
+        Point lastPoint;
+        private void DrawTest_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                lastPoint = new Point(e.X, e.Y);
+            }
+            if (e.Button == MouseButtons.Right)
+            {
+                draw.Clear(Color.White);
+                Input.setDest(new Point(e.X, e.Y), lastPoint);
+                Point p;
+                Point start = new Point(lastPoint.X, lastPoint.Y);
+                bool b = true;
+                while ((p = Input.UpdateCursor()) != Point.Empty)
+                {
+                    int x1=start.X, y1=start.Y;
+                    start.Offset(p);
+                    if(b)
+                        draw.DrawLine(Pens.Red, x1, y1, start.X, start.Y);
+                    else
+                        draw.DrawLine(Pens.Blue, x1, y1, start.X, start.Y);
+                    b = !b;
+                }
+                draw.FillEllipse(Brushes.Black, lastPoint.X-4, lastPoint.Y-4, 8, 8);
+                draw.FillEllipse(Brushes.Black, start.X-4, start.Y-4, 8, 8);
+                DrawTest.Image = drawmap;
+            }
+            if (e.Button == MouseButtons.Middle)
+            {
+                
+
+            }
+        }
+
+        void updateSelectDraw()
+        {
+            if (DataDraw == null) DataDraw = Graphics.FromImage(DataBitmap); ;
+            for (int y = 0; y < 16; y++)
+                for (int x = 0; x < 16; x++)
+                {
+                    DataDraw.FillRectangle(new SolidBrush(selectcolor[x, y]), x * 10, y * 10, 10, 10);
+                    if(selectcolorenb[x,y])
+                        DataDraw.DrawRectangle(Pens.Red, x * 10 , y * 10 , 9, 9);
+                    if(startPoint.X==x&&startPoint.Y==y)
+                        DataDraw.DrawRectangle(Pens.Blue, x * 10+1, y * 10+1, 7, 7);
+                }
+            DataImage.Image = DataBitmap;
+        }
+
+        double[] rgb2hsv(double r, double g, double b)
+        {
+
+            r /= 255.0;
+            g /= 255.0;
+            b /= 255.0;
+            double mx = Math.Max(r, Math.Max(g, b));
+            double mn = Math.Min(r, Math.Min(g, b));
+            double diff = mx - mn;
+            double h=0, s=0, v=0;
+
+            if (mx == mn)
+                h = 0;
+            else if (mx == r)
+            {
+                if (g >= b)
+                    h = 60 * ((g - b) / diff) + 0;
+                else
+                    h = 60 * ((g - b) / diff) + 360;
+            }
+            else if (mx == g)
+                h = 60 * ((b - r) / diff) + 120;
+            else if (mx == b)
+                h = 60 * ((r - g) / diff) + 240;
+
+//# 先计算L
+            v = (mx + mn) / 2.0;
+
+            //  # 再计算S
+            if (mx == mn)
+                s = 0;
+            else if (v > 0 && v <= 0.5)
+                s = (diff / v) / 2.0;
+            else if (v > 0.5)
+                s = (diff / (1 - v)) / 2.0;
+
+            return new double[] { h, s, v };
+
+            //double K = 0.0;
+            //double tmp;
+
+            //if (g < b)
+            //{
+            //    tmp = g;
+            //    g = b;
+            //    b = tmp;
+
+            //    K = -1.0f;
+            //}
+
+            //if (r < g)
+            //{
+            //    tmp = r;
+            //    r = g;
+            //    g = tmp;
+
+            //    K = -2.0f / 6.0f - K;
+            //}
+
+            //double chroma = r - g>b?b:g;
+            //double[] hsv = new double[3];
+            //hsv[0] = (K + (g - b) / (6.0 * chroma + 1e-20));
+            //hsv[1] = chroma / (r + 1e-20);
+            //hsv[2] = r;
+
+            //return hsv;
+        }
+
+
+        Color[,] selectcolor = new Color[16, 16];
+        bool[,] selectcolorenb = new bool[16, 16];
+        Point startPoint=Point.Empty;
+        Bitmap DataBitmap = new Bitmap(160, 160);
+        Graphics DataDraw;
+        private void DataImage_MouseClick(object sender, MouseEventArgs e)
+        {
+            if (DataDraw == null)
+                DataDraw = Graphics.FromImage(DataBitmap);
+            if (e.Button == MouseButtons.Left)
+            {
+                if (e.X < 160 && e.Y < 160)
+                {
+                    int dx = e.X / 10;
+                    int dy = e.Y / 10;
+                    selectcolorenb[dx, dy] = !selectcolorenb[dx, dy];
+                    valR.Text = "R:" + selectcolor[dx, dy].R;
+                    valG.Text = "G:" + selectcolor[dx, dy].G;
+                    valB.Text = "B:" + selectcolor[dx, dy].B;
+                    var hsv = rgb2hsv(selectcolor[dx, dy].R, selectcolor[dx, dy].G, selectcolor[dx, dy].B);
+                    valH.Text = "H:" + hsv[0];
+                    valS.Text = "S:" + hsv[1];
+                    valV.Text = "V:" + hsv[2];
+                    updateSelectDraw();
+                }
+
+            }
+            if (e.Button == MouseButtons.Right)
+            {
+                if (e.X < 160 && e.Y < 160)
+                {
+                    int dx = e.X / 10;
+                    int dy = e.Y / 10;
+                    startPoint = new Point(dx, dy);
+                    valR.Text = "R:" + selectcolor[dx, dy].R;
+                    valG.Text = "G:" + selectcolor[dx, dy].G;
+                    valB.Text = "B:" + selectcolor[dx, dy].B;
+                    var hsv = rgb2hsv(selectcolor[dx, dy].R, selectcolor[dx, dy].G, selectcolor[dx, dy].B);
+                    valH.Text = "H:" + hsv[0];
+                    valS.Text = "S:" + hsv[1];
+                    valV.Text = "V:" + hsv[2];
+                    updateSelectDraw();
+                }
+
+            }
+            
+        }
+
+        private void copyscreenbutton_Click(object sender, EventArgs e)
+        {
+            DrawScreen();
+        }
+
+        private void DrawTest_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            int lx = e.X, ly = e.Y;
+            if (lx < 8) lx = 8;
+            if (ly < 8) ly = 8;
+            lx -= 8;
+            ly -= 8;
+            for (int y = 0; y < 16; y++)
+                for (int x = 0; x < 16; x++)
+                {
+                    selectcolor[x, y] = ((Bitmap)(DrawTest.Image)).GetPixel(lx + x, ly + y);
+                    selectcolorenb[x, y] = false;
+                }
+            updateSelectDraw();
+        }
+
+        private void getposbutton_Click(object sender, EventArgs e)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{");
+            for (int y = 0; y < 16; y++)
+                for (int x = 0; x < 16; x++)
+                {
+                    if(selectcolorenb[x, y])
+                    {
+                        sb.Append("" + (x - startPoint.X));
+                        sb.Append(",");
+                        sb.Append("" + (y - startPoint.Y));
+                        sb.Append(",");
+                    }
+                }
+            sb.Append("}");
+            OutputBox.Text = sb.ToString();
         }
     }
 }
