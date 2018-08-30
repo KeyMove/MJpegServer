@@ -266,6 +266,21 @@ namespace HIDTEST
             return true;
         }
 
+
+
+        public bool OpenUSBHID(int vid=2211,int pid=4433)
+        {
+            var list = getHandle(vid, pid);
+            if (list.Count != 0)
+                return OpenUSBHID(list[0]);
+            return false;
+        }
+
+        public bool OpenUSBHID()
+        {
+            return OpenUSBHID(2211, 4433);
+        }
+
         public void Close()
         {
             if (HidHandle != FAIL)
@@ -284,6 +299,8 @@ namespace HIDTEST
         //根据CreateFile拿到的设备handle访问文件，并返回数据
         public bool USBDataRead(IntPtr handle)
         {
+            if (handle == IntPtr.Zero)
+                handle = HidHandle;
             while (true)
             {
                 uint read = 0;

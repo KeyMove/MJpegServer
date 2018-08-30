@@ -79,6 +79,16 @@ namespace MJpegServer
             }
         }
 
+        public void TestHID()
+        {
+            Input.TestHID();
+        }
+
+        public void KeyClear()
+        {
+            Input.Clear();
+        }
+
         public void KeyUP(int vk)
         {
             Input.KeyInput(vk, Input.KeyFlag.Up);
@@ -117,6 +127,57 @@ namespace MJpegServer
         public void MouseMoveTo(int x,int y)
         {
             Input.setDest(new Point(x, y), Cursor.Position);
+        }
+
+        public int MouseOffset(int x,int y,int max=10)
+        {
+            int xs = x - Cursor.Position.X;
+            int ys = y - Cursor.Position.Y;
+            xs = (xs > 0) ? (xs > max) ? max : xs : (-xs > max) ? -max : xs;
+            ys = (ys > 0) ? (ys > max) ? max : ys : (-ys > max) ? -max : ys;
+            return xs << 16 + ys;
+        }
+
+        public bool MouseStepInt(int loc, int max = 10)
+        {
+            int x = loc >> 16;
+            int y = loc & 0xffff;
+            int xs = x - Cursor.Position.X;
+            int ys = y - Cursor.Position.Y;
+            int incx, incy;
+            if (xs > 0)
+                incx = xs > (max / 2 + 1) ? max : 0;
+            else
+                incx = -xs > (max / 2 + 1) ? -max : 0;
+            if (ys > 0)
+                incy = ys > (max / 2 + 1) ? max : 0;
+            else
+                incy = -ys > (max / 2 + 1) ? -max : 0;
+
+
+            if (incx == 0 && incy == 0) return false;
+            Input.MouseInput(incx, incy);
+            return true;
+        }
+
+        public bool MouseStep(int x,int y,int max=10)
+        {
+            int xs = x - Cursor.Position.X;
+            int ys = y - Cursor.Position.Y;
+            int incx, incy;
+            if (xs > 0)
+                incx = xs > max/2 ? max : 0;
+            else
+                incx = -xs > max/2 ? -max : 0;
+            if (ys > 0)
+                incy = ys > max/2 ? max : 0;
+            else
+                incy = -ys > max/2 ? -max : 0;
+
+
+            if (incx == 0 && incy == 0) return false;
+            Input.MouseInput(incx, incy);
+            return true;
         }
 
         //public Object getDM()
@@ -173,6 +234,117 @@ namespace MJpegServer
         }
 
 
+        public List<int> ScanRectRGB(int r, int g, int b, int x, int y, int w, int h,int mode, int offset = 0)
+        {
+            List<int> plist = new List<int>();
+            if (colorData == null) return plist;
+            int color = (r << 16) + (g << 8) + b;
+            color += 0xff << 24;
+            var s = ScreenCap.Size;
+            int count = s.Width * s.Height;
+            int index = 0;
+            int sr = r, sg = g, sb = b;
+            int incx, incy;
+            incx = (mode & 1) > 0 ? -1 : 1;
+            incy = (mode & 2) > 0 ? -1 : 1;
+            index = y;
+            index *= s.Width;
+            index += x;
+            if ((mode & 4) > 0)
+            {
+                if (incy > 0)
+                {
+                    if (incx > 0)
+                        incy = -(s.Width * (h-1) - 1);
+                    else
+                    {
+                        incy = -(s.Width * (h-1) + 1);
+                        index += w - 1;
+                    }
+                    incx = s.Width;
+                }
+                else
+                {
+                    index += (h - 1) * s.Width;
+                    if (incx > 0)
+                        incy = (s.Width * (h - 1) + 1);
+                    else
+                    {
+                        incy = (s.Width * (h - 1) - 1);
+                        index += w - 1;
+                    }
+                    incx = -s.Width;
+                }
+                int swap;
+                swap = h;
+                h = w;
+                w = swap;
+                w--;
+            }
+            else
+            {
+                if (incy > 0)
+                {
+                    if (incx > 0)
+                        incy *= s.Width - w;
+                    else
+                    {
+                        incy *= s.Width + w;
+                        index += w - 1;
+                    }
+                }
+                else
+                {
+                    index += (h - 1) * s.Width;
+                    if (incx > 0)
+                        incy *= s.Width + w;
+                    else
+                    {
+                        incy *= s.Width - w;
+                        index += w - 1;
+                    }
+                }
+            }
+            if (offset != 0)
+            {
+                for (int sy = 0; sy < h; sy++)
+                {
+                    for (int sx = 0; sx < w; sx++)
+                    {
+                        color = colorData[index];
+                        r = sr - 0xff & (color >> 16);
+                        g = sg - 0xff & (color >> 8);
+                        b = sb - 0xff & color;
+                        if (r < 0) r = -r;
+                        if (g < 0) g = -g;
+                        if (b < 0) b = -b;
+                        if (r > offset) continue;
+                        if (g > offset) continue;
+                        if (b > offset) continue;
+                        plist.Add(((index % s.Width) << 16) + (index / s.Width));
+                        index+=incx;
+                    }
+                    index += incy;
+                }
+            }
+            else
+            {
+                for (int sy = 0; sy < h; sy++)
+                {
+                    for (int sx = 0; sx < w; sx++)
+                    {
+                        if (colorData[index] == color)
+                        {
+                            plist.Add(((index % s.Width) << 16) + (index / s.Width));
+                        }
+                        index+=incx;
+                    }
+                    index += incy;
+                }
+            }
+            return plist;
+        }
+
         public List<int> FindRectRGB(int r,int g,int b,int x,int y,int w,int h,int offset=0)
         {
             List<int> plist = new List<int>();
@@ -183,29 +355,46 @@ namespace MJpegServer
             int count = s.Width * s.Height;
             int index = 0;
             int sr = r, sg = g, sb = b;
+            index = y;
+            index *= s.Width;
+            index += x;
             if (offset != 0)
-                for (int i = 0; i < count; i++)
+            {
+                for (int sy = 0; sy < h; sy++)
                 {
-                    color = colorData[index++];
-                    r = sr - 0xff & (color >> 16);
-                    g = sg - 0xff & (color >> 8);
-                    b = sb - 0xff & color;
-                    if (r < 0) r = -r;
-                    if (g < 0) g = -g;
-                    if (b < 0) b = -b;
-                    if (r > offset) continue;
-                    if (g > offset) continue;
-                    if (b > offset) continue;
-                    plist.Add(((i % s.Width) << 16) + (i / s.Width));
-                }
-            else
-                for (int i = 0; i < count; i++)
-                {
-                    if (colorData[index++] == color)
+                    for (int sx = 0; sx < w; sx++)
                     {
-                        plist.Add(((i % s.Width) << 16) + (i / s.Width));
+                        color = colorData[index];
+                        r = sr - 0xff & (color >> 16);
+                        g = sg - 0xff & (color >> 8);
+                        b = sb - 0xff & color;
+                        if (r < 0) r = -r;
+                        if (g < 0) g = -g;
+                        if (b < 0) b = -b;
+                        if (r > offset) continue;
+                        if (g > offset) continue;
+                        if (b > offset) continue;
+                        plist.Add(((index % s.Width) << 16) + (index / s.Width));
+                        index++;
                     }
+                    index += s.Width - w;
                 }
+            }
+            else
+            {
+                for (int sy = 0; sy < h; sy++)
+                {
+                    for (int sx = 0; sx < w; sx++)
+                    {
+                        if (colorData[index] == color)
+                        {
+                            plist.Add(((index % s.Width) << 16) + (index / s.Width));
+                        }
+                        index++;
+                    }
+                    index += s.Width - w;
+                }
+            }
             return plist;
         }
 

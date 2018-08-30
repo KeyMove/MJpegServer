@@ -66,17 +66,19 @@ namespace KMButton
         {
             ix = p.X - px.X;
             iy = p.Y - px.Y;
-            incx = 1;
-            incy = 1;
+            ix /= 10;
+            iy /= 10;
+            incx = 10;
+            incy = 10;
             if (ix < 0)
             {
                 ix = -ix;
-                incx = -1;
+                incx = -10;
             }
             if (iy < 0)
             {
                 iy = -iy;
-                incy = -1;
+                incy = -10;
             }
             discount = dis = ix > iy ? ix : iy;
             scalcount = 0;
@@ -92,6 +94,12 @@ namespace KMButton
                 if ((discount % 2)!=0)
                     nor = 1;
             }
+        }
+
+        public static void Clear()
+        {
+            mousekeystats = 0;
+            keylist.Clear();
         }
 
         public static void MoveTo(Point x,Point y)
@@ -249,17 +257,18 @@ namespace KMButton
                                 switch (_hidsw)
                                 {
                                     case 0:
-                                        var v = hid.getHandle(2211, 4433);
-                                        if (v.Count != 0)
+                                        //var v = hid.getHandle(2211, 4433);
+                                        //if (v.Count != 0)
+                                        //{
+
+                                        //}
+                                        if (hid.OpenUSBHID())
                                         {
-                                            if (hid.OpenUSBHID(v[0]))
-                                            {
-                                                _hidsw = 1;
-                                                hid.WriteData(new byte[] { 1, 0, 0, 0, 0, 0, 0 });
-                                                timer.Interval = 1;
-                                                if (HIDStatsChange != null)
-                                                    HIDStatsChange(true);
-                                            }
+                                            _hidsw = 1;
+                                            hid.WriteData(new byte[] { 1, 0, 0, 0, 0, 0, 0 });
+                                            timer.Interval = 1;
+                                            if (HIDStatsChange != null)
+                                                HIDStatsChange(true);
                                         }
                                         break;
                                     case 1:
@@ -356,16 +365,20 @@ namespace KMButton
             switch (flag)
             {
                 case MouseFlag.LeftDown:
-                    mousekeystats += (byte)MouseKey.Left;
+                    if ((mousekeystats & 0x01) == 0)
+                        mousekeystats += (byte)MouseKey.Left;
                     break;
                 case MouseFlag.LeftUp:
-                    mousekeystats -= (byte)MouseKey.Left;
+                    if ((mousekeystats & 0x01) != 0)
+                        mousekeystats -= (byte)MouseKey.Left;
                     break;
                 case MouseFlag.RightDown:
-                    mousekeystats += (byte)MouseKey.Right;
+                    if ((mousekeystats & 0x02) == 0)
+                        mousekeystats += (byte)MouseKey.Right;
                     break;
                 case MouseFlag.RightUp:
-                    mousekeystats -= (byte)MouseKey.Right;
+                    if ((mousekeystats & 0x02) != 0)
+                        mousekeystats -= (byte)MouseKey.Right;
                     break;
                 case MouseFlag.Reset:
                     mousekeystats = 0x08;
@@ -417,7 +430,8 @@ namespace KMButton
                     keydata[1] = 0x5A;
                     keydata[2] = 0;
                     int i = 0;
-                    for (i = 0; i < keylist.Count; i++)
+                    int j = keylist.Count > 4 ? 4 : keylist.Count;
+                    for (i = 0; i < j; i++)
                         keydata[3 + i] = keylist[i];
                     for (; i < 4; i++)
                         keydata[3 + i] = 0;
