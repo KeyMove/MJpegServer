@@ -38,7 +38,7 @@ namespace MJpegServer
 
         public delegate void SocketPostCallBack(string message,Socket sk);
         public delegate void SocketGetCallBack(string message, Socket sk);
-        public HTTP(int port)
+        public HTTP(int port,byte[] defaultfile)
         {
             myList = new TcpListener(IPAddress.Any, port);
             DirPath = System.IO.Directory.GetCurrentDirectory()+"\\html";
@@ -48,6 +48,8 @@ namespace MJpegServer
             {
                 StringBuilder sb = new StringBuilder("HTTP/1.1 200 OK\r\nContent-type: text/html\r\nContent-Length: ");
                 byte[] pagearray = HttpIndex.IndexPageArray;
+                if (defaultfile != null)
+                    pagearray = defaultfile;
                 sb.Append(pagearray.Length);
                 sb.Append("\r\n\r\n");
                 indexPageArray = new byte[pagearray.Length + sb.Length];

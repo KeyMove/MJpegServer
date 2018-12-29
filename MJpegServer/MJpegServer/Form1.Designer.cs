@@ -57,6 +57,7 @@
             this.getposbutton = new System.Windows.Forms.Button();
             this.DataImage = new System.Windows.Forms.PictureBox();
             this.copyscreenbutton = new System.Windows.Forms.Button();
+            this.clearposbutton = new System.Windows.Forms.Button();
             this.contextMenuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.TestPic)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DrawTest)).BeginInit();
@@ -237,6 +238,7 @@
             this.tabPage2.Controls.Add(this.valG);
             this.tabPage2.Controls.Add(this.valH);
             this.tabPage2.Controls.Add(this.valR);
+            this.tabPage2.Controls.Add(this.clearposbutton);
             this.tabPage2.Controls.Add(this.getposbutton);
             this.tabPage2.Controls.Add(this.DataImage);
             this.tabPage2.Location = new System.Drawing.Point(4, 22);
@@ -331,11 +333,21 @@
             this.copyscreenbutton.UseVisualStyleBackColor = true;
             this.copyscreenbutton.Click += new System.EventHandler(this.copyscreenbutton_Click);
             // 
+            // clearposbutton
+            // 
+            this.clearposbutton.Location = new System.Drawing.Point(171, 32);
+            this.clearposbutton.Name = "clearposbutton";
+            this.clearposbutton.Size = new System.Drawing.Size(75, 23);
+            this.clearposbutton.TabIndex = 1;
+            this.clearposbutton.Text = "清空选择";
+            this.clearposbutton.UseVisualStyleBackColor = true;
+            this.clearposbutton.Click += new System.EventHandler(this.clearposbutton_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(255, 62);
+            this.ClientSize = new System.Drawing.Size(256, 63);
             this.Controls.Add(this.copyscreenbutton);
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.TestPic);
@@ -394,6 +406,7 @@
         private System.Windows.Forms.Label valV;
         private System.Windows.Forms.Label valS;
         private System.Windows.Forms.Label valH;
+        private System.Windows.Forms.Button clearposbutton;
     }
 }
 

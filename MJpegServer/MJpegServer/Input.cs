@@ -351,6 +351,12 @@ namespace KMButton
                 case 0x27: return 79;
                 case 0x28: return 81;
                 case 0x2d: return 76;
+                case '/':
+                case '?':return 0x38;
+                case '.':
+                case '>':return 0x37;
+                case '<':
+                case ',':return 0x36;
             }
             return 0xff;
         }

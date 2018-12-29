@@ -1,0 +1,50 @@
+<html>
+<head><title>test</title></head>
+<body bgcolor="#d0d0d0" onkeydown="if(sk!=event.key){post('/key:1,'+event.key);sk=event.key}" onkeyup="if(sk==event.key)sk=null;post('/key:0,'+event.key);" onmouseup="post('/mouse:u,'+event.button)" onmousedown="if(checkmouse(event))post('/mouse:d,'+event.button)" onmousemove="if(first&&checkmouse(event))post('/mouse:m,'+(document.body.scrollLeft+event.clientX)+'|'+(document.body.scrollTop+event.clientY-45)+'|'+w+'|'+h)">
+<script>var sk;var issend=false;var isrect=false;var w=0;var h=0;var first=false;document.oncopy=function(){return false};document.oncontextmenu=function(){return false};function post(val,flag){
+var x=document.getElementById("postdata");
+x.action=val;
+if(!first){
+if(w==0&&h==0)
+{issend=true;}
+var img=document.getElementById("stream")
+w=img.width;
+h=img.height;
+if(w<=64&&h<=64){
+//alert("未能获取图片,刷新页面");
+issend=false;
+return;}
+first=true;
+//alert("x:"+w+"y:"+h);
+}
+if(issend)
+x.submit();
+}
+function checkmouse(e){
+var y=e.clientY+document.body.scrollTop;
+var x=e.clientX+document.body.scrollLeft;
+console.log("x="+x+" w="+w+" y="+y+" h="+h)
+if(x<w&&y>45&&y<(45+h)){isrect=true;return true}
+isrect=false;
+return false
+}
+function showset(bool){
+issend=bool
+}
+</script>
+<div style="position: absolute;left:0;top:45"><img id="stream" src="/?Stream"/><div style="position: absolute;left:0;top:0;right:0;bottom:0"></div></div>
+<div id="setinfo" style="display: none;position: absolute;left:0;top:0">
+<iframe style="width:0; height:0; margin-top:-10px;" name="submitFrame" src="about:blank"></iframe>
+<form id="postdata" target="submitFrame" method="post"></form>
+质量:<input id="qt" type="text" size="3" maxlength="2" value="70"/>
+尺寸:<input id="sc" type="text" size="3" maxlength="3" value="100"/>%
+刷新帧率:<input id="fq" type="text" size="3" maxlength="2" value="1"/>
+<input id="md" type="checkbox" onclick="stream.src='/?img'" />图片模式
+lua:<input id="lua" type="text" size="3" value="" />
+<input type="button" value="Input" onclick="postdata.action='/lua:'+lua.value;postdata.submit();" />
+<input type="button" value="提交" onclick="postdata.action='/cmd:o1,Q:'+qt.value+',S:'+sc.value+',F:'+fq.value+',M:'+md.checked;postdata.submit();first=false"/>
+<input type="button" value="<<收起设置" onclick="showset(true);hideinfo.style.display='';setinfo.style.display='none';"/>
+</div>
+<div id="hideinfo"><input type="button" value=">>展开设置" onclick="showset(false);hideinfo.style.display='none';setinfo.style.display='';"/></div>
+</body>
+</html>

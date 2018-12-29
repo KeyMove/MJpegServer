@@ -61,6 +61,18 @@ namespace MJpegServer.Properties {
         }
         
         /// <summary>
+        ///   查找类似 &lt;html&gt;
+        ///&lt;head&gt;&lt;title&gt;test&lt;/title&gt;&lt;/head&gt;
+        ///&lt;body bgcolor=&quot;#d0d0d0&quot; onkeydown=&quot;if(sk!=event.key){post(&apos;/key:1,&apos;+event.key);sk=event.key}&quot; onkeyup=&quot;if(sk==event.key)sk=null;post(&apos;/key:0,&apos;+event.key);&quot; onmouseup=&quot;post(&apos;/mouse:u,&apos;+event.button)&quot; onmousedown=&quot;if(checkmouse(event))post(&apos;/mouse:d,&apos;+event.button)&quot; onmousemove=&quot;if(first&amp;&amp;checkmouse(event))post(&apos;/mouse:m,&apos;+(document.body.scrollLeft+event.clientX)+&apos;|&apos;+(document.body.scrollTop+event.clientY-45)+&apos;|&apos;+w+&apos;|&apos;+h)&quot;&gt;
+        ///&lt;script&gt;var sk;var issend=false;var isrect= [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        /// </summary>
+        internal static string index {
+            get {
+                return ResourceManager.GetString("index", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   查找 System.Drawing.Bitmap 类型的本地化资源。
         /// </summary>
         internal static System.Drawing.Bitmap prog_lua_24px_1097210_easyicon_net {

@@ -99,6 +99,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="icon.ico" />
+    <None Include="index.html" />
     <None Include="prog_lua_24px_1097210_easyicon.net.png" />
     <None Include="update_24px_1160368_easyicon.net.png" />
     <None Include="rocket_24px_1132368_easyicon.net.png" />

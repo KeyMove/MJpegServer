@@ -29,6 +29,8 @@ namespace MJpegServer
 
         Bitmap drawmap;
         Graphics draw;
+        Size newSize=new Size();
+        bool isNewSize = false;
 
         List<Timer> TimerList = new List<Timer>();
         List<Object> FunList = new List<Object>();
@@ -345,6 +347,30 @@ namespace MJpegServer
             return plist;
         }
 
+        public void DrawBlock(int loc,int w,int h)
+        {
+            int x = loc >> 16;
+            int y = loc & 0xffff;
+            draw.FillRectangle(Brushes.Black, x, y, w, h);
+        }
+
+        public void addFillBlock(int x,int y,int w,int h,int value)
+        {
+            var s = ScreenCap.Size;
+            int index = y;
+            index *= s.Width;
+            index += x;
+            for (int sy = 0; sy < h; sy++)
+            {
+                for (int sx = 0; sx < w; sx++)
+                {
+                    colorData[index]=value;
+                    index++;
+                }
+                index += s.Width - w;
+            }
+        }
+
         public List<int> FindRectRGB(int r,int g,int b,int x,int y,int w,int h,int offset=0)
         {
             List<int> plist = new List<int>();
@@ -499,6 +525,67 @@ namespace MJpegServer
             return matchpos.ToArray();
         }
 
+        public List<int> removeRectPointInt(int loc, int w, int h, List<int> plist, int start = 0)
+        {
+            int x = loc >> 16;
+            int y = loc & 0xffff;
+            return removeRectPoint(x, y, w, h, plist, start);
+        }
+
+        public List<int> removeRectPoint(int x,int y,int w,int h, List<int> plist,int start=0)
+        {
+            if (start != 0)
+            {
+                if(plist.Contains(start))
+                plist.RemoveRange(0, plist.IndexOf(start));
+            }
+            int count = plist.Count;
+            int index = 0;
+            Rectangle r = new Rectangle(x, y, w, h);
+            while (count > 0)
+            {
+                int px = plist[index] >> 16;
+                int py = plist[index] & 0xffff;
+
+                if (r.Contains(px, py))
+                    plist.RemoveAt(index);
+                else
+                    index++;
+                count--;
+            }
+            return plist;
+        }
+
+        public List<int> getRectPointInt(int loc, int w, int h, List<int> plist, int start=0)
+        {
+            int x = loc >> 16;
+            int y = loc & 0xffff;
+            return getRectPoint(x, y, w, h, plist, start);
+        }
+
+        public List<int> getRectPoint(int x,int y,int w,int h,List<int> plist,int start=0)
+        {
+            List<int> newplist = new List<int>();
+            if (start != 0)
+            {
+                if (plist.Contains(start))
+                    plist.RemoveRange(0, plist.IndexOf(start));
+            }
+            int count = plist.Count;
+            int index = 0;
+            Rectangle r = new Rectangle(x, y, w, h);
+            while (count > 0)
+            {
+                int px = plist[index] >> 16;
+                int py = plist[index] & 0xffff;
+                if (r.Contains(px, py))
+                    newplist.Add(plist[index]);
+                index++;
+                count--;
+            }
+            return newplist;
+        }
+
         public int[] matchPointList(int[] px, int[] py, int r,int g,int b,bool mult=false)
         {
             return matchPointList(px, py, FindRGB(r, g, b),mult);
@@ -620,6 +707,111 @@ namespace MJpegServer
         public int offset(int loc,int x,int y)
         {
             return (((loc >> 16) + x) << 16) + ((loc & 0xffff) + y);
+        }
+
+        public List<int> RGBNearPoint(int x, int y, int w, int h, int min = 5, int max = int.MaxValue,int rx=8)
+        {
+            int[] values = RGBSortRect(x, y, w, h, min, max);
+            List<int> tlist = new List<int>();
+            Dictionary<int, int> rvalue = new Dictionary<int, int>();
+            Dictionary<int, int> tvalue = new Dictionary<int, int>();
+            for (int i = 0; i < values.Length; i += 2)
+            {
+                int r = (values[i] >> 16) & 0xff;
+                int g = (values[i] >> 8) & 0xff;
+                int b = (values[i] >> 0) & 0xff;
+                var points=FindRectRGB(r,g,b,x,y,w,h);
+                int len = points.Count;
+                len = len > 5 ? len - 5:5;
+                rvalue.Clear();
+                for(int j = 0; j < points.Count; j++)
+                {
+                    int locs = offset(points[j], -rx/2, -rx/2);
+                    for(int ly=0;ly<rx;ly++)
+                        for(int lx=0;lx<rx;lx++)
+                        {
+                            int locv = locs + ly + (lx << 16);
+                            if (!rvalue.ContainsKey(locv))
+                                rvalue.Add(locv, 1);
+                            else
+                                rvalue[locv]++;
+                        }
+                }
+                var xy = rvalue.OrderBy(o => o.Value).ToDictionary(p => p.Key, o => o.Value);
+                var ps=xy.Values.ToArray();
+                var pa=xy.Keys.ToArray();
+                if (ps[ps.Length - 1] > 5)
+                    if(!tvalue.ContainsKey(pa[pa.Length-1]))
+                        tvalue.Add(pa[pa.Length - 1], ps[ps.Length - 1]);
+            }
+            var txy = tvalue.OrderBy(o => o.Value).ToDictionary(p => p.Key, o => o.Value);
+            int[] rvalues = txy.Keys.ToArray();
+            int[] rcounts = txy.Values.ToArray();
+            //List<int> kvs = new List<int>();
+            for (int i = 0; i < rvalues.Length; i++)
+            {
+                if ((rcounts[i] >= 5) && (rcounts[i] <= 9))
+                {
+                    tlist.Add(rvalues[i]);
+                    tlist.Add(rcounts[i]);
+                }
+
+            }
+            return tlist;
+        }
+
+        public int[] RGBSortRect(int x,int y,int w,int h,int min=3,int max=int.MaxValue)
+        {
+            var s = ScreenCap.Size;
+            int index = x + y * s.Width;
+            int incw = s.Width - w;
+            Dictionary<int, int> rgbmap = new Dictionary<int, int>();
+            for (int sy = 0; sy < h; sy++)
+            {
+                for (int sx = 0; sx < w; sx++)
+                {
+                    if (!rgbmap.ContainsKey(colorData[index]))
+                        rgbmap.Add(colorData[index], 1);
+                    else
+                        rgbmap[colorData[index]]++;
+                    index++;
+                }
+                index += incw;
+            }
+            var xy = rgbmap.OrderBy(o => o.Value).ToDictionary(p => p.Key, o => o.Value);
+            int[] values = xy.Keys.ToArray();
+            int[] counts = xy.Values.ToArray();
+            List<int> kvs = new List<int>();
+            for(int i = 0; i < values.Length; i++)
+            {
+                if ((counts[i] >= min) && (counts[i] <= max))
+                {
+                    kvs.Add(values[i]&0x00ffffff);
+                    kvs.Add(counts[i]);
+                }
+
+            }
+            return kvs.ToArray();
+        }
+
+        public int[] RGBSort(int count)
+        {
+            Dictionary<int, int> rgbmap=new Dictionary<int, int>();
+            for (int i = 0; i < colorData.Length; i++)
+                if (!rgbmap.ContainsKey(colorData[i]))
+                    rgbmap.Add(colorData[i], 1);
+                else
+                    rgbmap[colorData[i]]++;
+            var x= rgbmap.OrderBy(o => o.Value).ToDictionary(p=>p.Key,o=>o.Value);
+            int[] values = rgbmap.Keys.ToArray();
+            int[] counts = rgbmap.Values.ToArray();
+            int[] rgbsort = new int[values.Length*2];
+            for(int i = 0; i < values.Length; i++)
+            {
+                rgbsort[i*2] = values[i];
+                rgbsort[i*2 + 1] = counts[i];
+            }
+            return rgbsort;
         }
 
         public int matchNextRGB(int loc,int max,int r,int g,int b,int offset = 0)
@@ -763,15 +955,15 @@ namespace MJpegServer
             //}
 
 
-            Input.HID = HID;
 
             InitializeComponent();
 
+            Input.HID = HID;
             drawmap = new Bitmap(DrawTest.Width, DrawTest.Height);
             draw = Graphics.FromImage(drawmap);
 
             int port = 80;
-            WebServer = new HTTP(port=GetPort());
+            WebServer = new HTTP(port = GetPort(), Encoding.Default.GetBytes(MJpegServer.Properties.Resources.index));
             PortLable.Text = " Port:" + port;
             map = new Bitmap(WindowW, WindowH);
             g = Graphics.FromImage(map);
@@ -812,7 +1004,9 @@ namespace MJpegServer
                     {
                         int value = int.Parse(list[2].Substring(2));
                         double sc = (double)value / 100;
-                        ScreenCap.Init((int)(WindowW * sc), (int)(WindowH * sc), true);
+                        newSize.Width =(int) (WindowW * sc);
+                        newSize.Height =(int)( WindowH * sc);
+                        isNewSize = true;
                     }
                     catch { }
                 }
@@ -820,10 +1014,10 @@ namespace MJpegServer
                 {
                     try
                     {
-                        int value = int.Parse(list[3].Substring(2));
-                        if (value < 1) value = 1;
+                        double value = double.Parse(list[3].Substring(2));
+                        if (value < 0.05) value = 0.05;
                         if (value > 30) value = 30;
-                        updatevalue = 1000/value;
+                        updatevalue = (int)((1.0/value)*1000);
                     }
                     catch { }
                 }
@@ -874,7 +1068,10 @@ namespace MJpegServer
                             wy = WindowH / wy;
                             px = (int)(px * wx);
                             py = (int)(py * wy);
-                            Input.MouseInput(px, py, Input.MouseFlag.MoveTo);
+                            if (Input.HIDState)
+                                MouseStep(px, py);
+                            else
+                                Input.MouseInput(px, py, Input.MouseFlag.MoveTo);
                             break;
                     }
                 }
@@ -893,6 +1090,24 @@ namespace MJpegServer
                 {
                     Input.KeyInput(vk, Input.KeyFlag.Up);
                 }
+            });
+            WebServer.RegisterPost("lua:", (string v, Socket s) => {
+                s.Disconnect(true);
+                s.Close();
+                s.Dispose();
+                Invoke(new MethodInvoker(() => {
+                    v=Uri.UnescapeDataString(v.Substring(4));
+                    //v=Uri.EscapeDataString(v.Substring(4));
+                    OutputBox.AppendText("[WEBLUA]"+v+"\r\n");
+                    try
+                    {
+                        (lua as NLua.Lua).DoString(v);
+                    }
+                    catch (Exception ex)
+                    {
+                        OutputBox.AppendText(ex.ToString());
+                    }
+                }));
             });
             WebServer.RegisterGet((string v, Socket s) => {
                 if(v.Contains("?Stream"))
@@ -918,7 +1133,12 @@ namespace MJpegServer
                 //g.DrawString(DateTime.Now.ToString().Replace(" ", "\r\n"), Font, Brushes.Black, 0, 0);
                 if (MjpegServer.Clients > 0)
                 {
-                    try { 
+                    try {
+                        if (isNewSize)
+                        {
+                            isNewSize = false;
+                            ScreenCap.Init(newSize.Width, newSize.Height, true);
+                        }
                     MjpegServer.WriteImage(lastImage=ScreenCap.GetImage());
                     }
                     catch { }
@@ -955,7 +1175,7 @@ namespace MJpegServer
             switch (str)
             {
                 case "TAB": return 9;
-                case "BACK": return 8;
+                case "BACKSPACE": return 8;
                 case "RETURN": return 0x0d;
                 case "SHIFT": return 0x10;
                 case "CTRL": return 0x11;
@@ -981,7 +1201,13 @@ namespace MJpegServer
                 case "F10": return 0x79;
                 case "F11": return 0x7a;
                 case "F12": return 0x7b;
-                default: return (byte)str.ToCharArray()[0];
+                //case ">":
+                //case ".":return 190;
+                //case "<":
+                //case ",":return 188;
+                //case "?":
+                //case "/":return 191;
+                default: return str.Length==0?(byte)' ':(byte)str.ToCharArray()[0];
             }
         }
 
@@ -1165,7 +1391,9 @@ namespace MJpegServer
                 for (int x = 0; x < 16; x++)
                 {
                     DataDraw.FillRectangle(new SolidBrush(selectcolor[x, y]), x * 10, y * 10, 10, 10);
-                    if(selectcolorenb[x,y])
+                    if (selectcolor[x, y].ToArgb() == selectcolor[startPoint.X, startPoint.Y].ToArgb())
+                        DataDraw.DrawRectangle(Pens.Yellow, x * 10+2, y * 10+2, 5, 5);
+                    if (selectcolorenb[x,y])
                         DataDraw.DrawRectangle(Pens.Red, x * 10 , y * 10 , 9, 9);
                     if(startPoint.X==x&&startPoint.Y==y)
                         DataDraw.DrawRectangle(Pens.Blue, x * 10+1, y * 10+1, 7, 7);
@@ -1267,7 +1495,6 @@ namespace MJpegServer
                     valV.Text = "V:" + hsv[2];
                     updateSelectDraw();
                 }
-
             }
             if (e.Button == MouseButtons.Right)
             {
@@ -1285,7 +1512,6 @@ namespace MJpegServer
                     valV.Text = "V:" + hsv[2];
                     updateSelectDraw();
                 }
-
             }
             
         }
@@ -1328,6 +1554,14 @@ namespace MJpegServer
                 }
             sb.Append("}");
             OutputBox.Text = sb.ToString();
+        }
+
+        private void clearposbutton_Click(object sender, EventArgs e)
+        {
+            for (int y = 0; y < 16; y++)
+                for (int x = 0; x < 16; x++)
+                    selectcolorenb[x, y] = false;
+            updateSelectDraw();
         }
     }
 }

@@ -85,8 +85,7 @@ namespace MJpegServer
             if (buff == null) return;
             srcGraphics.CopyFromScreen(x, y, 0, 0, new Size(ex, ey));
             int depth= System.Drawing.Bitmap.GetPixelFormatSize(srcImage.PixelFormat);
-            var rect = new Rectangle(0, 0, srcImage.Width, srcImage.Height);
-            var bitmapData = srcImage.LockBits(rect, ImageLockMode.ReadWrite,
+            var bitmapData = srcImage.LockBits(new Rectangle(0, 0, srcImage.Width, srcImage.Height), ImageLockMode.ReadWrite,
 srcImage.PixelFormat);
             var count = depth / 8 * srcImage.Width * srcImage.Height;
             Marshal.Copy(bitmapData.Scan0, buff, 0, buff.Length);
